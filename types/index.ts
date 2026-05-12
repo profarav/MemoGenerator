@@ -129,3 +129,87 @@ export interface RelevanceMap {
   conversationHooks: string[]
   uncertainItems: string[]
 }
+
+// --- Apollo enrichment types ---
+
+export interface ApolloPersonResult {
+  id?: string
+  first_name?: string
+  last_name?: string
+  name?: string
+  title?: string
+  email?: string
+  linkedin_url?: string
+  city?: string
+  state?: string
+  country?: string
+  organization?: {
+    name?: string
+    website_url?: string
+    primary_domain?: string
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
+}
+
+export interface ApolloOrgResult {
+  id?: string
+  name?: string
+  website_url?: string
+  primary_domain?: string
+  industry?: string
+  estimated_num_employees?: number
+  annual_revenue?: number
+  city?: string
+  state?: string
+  country?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
+}
+
+export interface ResolvedPerson {
+  inputEmail?: string
+  fullName?: string
+  firstName?: string
+  lastName?: string
+  title?: string
+  companyName?: string
+  companyDomain?: string
+  linkedinUrl?: string
+  city?: string
+  state?: string
+  country?: string
+  rawApollo?: unknown
+}
+
+export interface ResolvedOrganization {
+  domain: string
+  name?: string
+  websiteUrl?: string
+  industry?: string
+  employeeCount?: number | string
+  estimatedRevenue?: string | number
+  city?: string
+  state?: string
+  country?: string
+  rawApollo?: unknown
+}
+
+export interface ResolvedEnrichmentOutput {
+  resolvedPeople: ResolvedPerson[]
+  resolvedOrganizations: ResolvedOrganization[]
+  primaryOrganization?: ResolvedOrganization
+  unresolvedInputs: string[]
+  originalRawInput: string
+}
+
+export interface ParsedQuickInput {
+  inputType: 'emails' | 'meeting_invite_text' | 'name_domain_fallback' | 'unknown'
+  extractedEmails: string[]
+  fallbackPerson?: {
+    firstName?: string
+    lastName?: string
+    companyDomain?: string
+  }
+  rawInput: string
+}

@@ -79,3 +79,43 @@ create index if not exists idx_generated_memos_memo_request_id
 
 create index if not exists idx_memo_requests_created_at
   on memo_requests (created_at desc);
+
+-- ============================================================
+-- Apollo enrichment cache tables
+-- Caches person and org lookups for 30 days to avoid
+-- redundant Apollo API calls and conserve plan credits.
+-- ============================================================
+
+create table if not exists apollo_people_cache (
+  id          uuid primary key default gen_random_uuid(),
+  lookup_key  text unique not null,  -- e.g. "email:chris@acme.com" or "namedomain:chris|marcus|acme.com"
+  input_email text,
+  full_name   text,
+  company_domain text,
+  response_json  jsonb,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+
+create table if not exists apollo_organization_cache (
+  id            uuid primary key default gen_random_uuid(),
+  domain        text unique not null,
+  response_json jsonb,
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+
+alter table apollo_people_cache       enable row level security;
+alter table apollo_organization_cache enable row level security;
+
+create policy "allow all apollo_people_cache"
+  on apollo_people_cache for all using (true) with check (true);
+
+create policy "allow all apollo_organization_cache"
+  on apollo_organization_cache for all using (true) with check (true);
+
+create index if not exists idx_apollo_people_cache_lookup_key
+  on apollo_people_cache (lookup_key);
+
+create index if not exists idx_apollo_organization_cache_domain
+  on apollo_organization_cache (domain);
