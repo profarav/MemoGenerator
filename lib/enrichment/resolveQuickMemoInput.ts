@@ -3,6 +3,7 @@ import {
   enrichPersonByEmail,
   enrichPeopleBulkByEmails,
   enrichPersonByNameAndDomain,
+  enrichPersonByLinkedIn,
   enrichOrganizationByDomain,
 } from '@/lib/apollo/client'
 import {
@@ -115,7 +116,15 @@ export async function resolveQuickMemoInput(params: {
     if (!result) {
       unresolvedInputs.push(`${firstName} ${lastName} @ ${companyDomain} (no Apollo match)`)
     }
+  } else if (parsed.inputType === 'linkedin_urls') {
+    // Enrich each LinkedIn URL individually (Apollo doesn't support bulk by LinkedIn URL)
+    for (const url of parsed.extractedLinkedInUrls) {
+      const result = await enrichPersonByLinkedIn(url)
+      apolloPeople.push({ result, inputEmail: result?.email ?? undefined })
+      if (!result) unresolvedInputs.push(`${url} (no Apollo match)`)
+    }
   } else {
+    // emails or meeting_invite_text — also enrich any LinkedIn URLs found alongside emails
     const emails = parsed.extractedEmails
     if (emails.length === 1) {
       const result = await enrichPersonByEmail(emails[0])
@@ -132,6 +141,20 @@ export async function resolveQuickMemoInput(params: {
         const match = resultsByEmail[email.toLowerCase()] ?? null
         apolloPeople.push({ result: match, inputEmail: email })
         if (!match) unresolvedInputs.push(email)
+      }
+    }
+
+    // Also enrich any LinkedIn URLs found in the same input (dedup by email)
+    for (const url of parsed.extractedLinkedInUrls) {
+      const result = await enrichPersonByLinkedIn(url)
+      if (result) {
+        const email = result.email?.toLowerCase()
+        const alreadyResolved = apolloPeople.some(
+          (p) => p.inputEmail && email && p.inputEmail.toLowerCase() === email
+        )
+        if (!alreadyResolved) {
+          apolloPeople.push({ result, inputEmail: result.email ?? undefined })
+        }
       }
     }
   }

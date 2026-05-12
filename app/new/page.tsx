@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Attendee, MeetingType, MemoDepth } from '@/types'
+import { Attendee, MeetingType, MemoDepth, ResolvedPerson, ResolvedOrganization } from '@/types'
 
 // ─── Attendee parser (used by manual form) ──────────────────────────────────
 
@@ -23,55 +23,132 @@ function parseAttendees(text: string): Attendee[] {
     })
 }
 
-// ─── Loading status messages for Quick Input ────────────────────────────────
-
-const QUICK_STATUS_STEPS = [
-  { key: 'parsing',           label: 'Parsing input…' },
-  { key: 'enriching_people',  label: 'Enriching people with Apollo…' },
-  { key: 'enriching_company', label: 'Enriching company details…' },
-  { key: 'generating',        label: 'Generating memo…' },
-] as const
-
-type QuickStatusKey = typeof QUICK_STATUS_STEPS[number]['key'] | null
-
 // ─── Quick Input Tab ─────────────────────────────────────────────────────────
+
+interface EnrichPreview {
+  resolvedPeople: ResolvedPerson[]
+  resolvedOrganizations: ResolvedOrganization[]
+  primaryOrganization?: ResolvedOrganization
+  unresolvedInputs: string[]
+}
+
+type QuickStep = 'input' | 'enriching' | 'preview' | 'generating'
+
+/** Small card showing one resolved person from Apollo */
+function PersonPreviewCard({ person }: { person: ResolvedPerson }) {
+  const name = person.fullName ?? [person.firstName, person.lastName].filter(Boolean).join(' ') ?? person.inputEmail ?? 'Unknown'
+  const hasApollo = !!person.rawApollo
+  return (
+    <div className={`rounded-lg border p-3 text-sm space-y-0.5 ${hasApollo ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold text-gray-900">{name}</span>
+        {hasApollo
+          ? <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">✓ Apollo</span>
+          : <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">stub</span>
+        }
+      </div>
+      {person.title && <p className="text-xs text-gray-600">{person.title}</p>}
+      {person.companyName && <p className="text-xs text-gray-500">{person.companyName}</p>}
+      {person.inputEmail && <p className="text-xs text-blue-600">{person.inputEmail}</p>}
+      {person.linkedinUrl && (
+        <a href={person.linkedinUrl} target="_blank" rel="noopener" className="text-xs text-blue-500 hover:underline">
+          LinkedIn ↗
+        </a>
+      )}
+    </div>
+  )
+}
+
+/** Small card showing resolved org */
+function OrgPreviewCard({ org, isPrimary }: { org: ResolvedOrganization; isPrimary: boolean }) {
+  const hasApollo = !!org.rawApollo
+  return (
+    <div className={`rounded-lg border p-3 text-sm space-y-0.5 ${hasApollo ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold text-gray-900">{org.name ?? org.domain}</span>
+        <div className="flex gap-1 shrink-0">
+          {isPrimary && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">primary</span>}
+          {hasApollo
+            ? <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">✓ Apollo</span>
+            : <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">domain only</span>
+          }
+        </div>
+      </div>
+      {org.industry && <p className="text-xs text-gray-600">{org.industry}</p>}
+      {org.employeeCount && <p className="text-xs text-gray-500">{org.employeeCount.toLocaleString()} employees</p>}
+      <p className="text-xs text-gray-400">{org.domain}</p>
+    </div>
+  )
+}
 
 function QuickInputTab() {
   const router = useRouter()
+
+  // Input fields
   const [rawInput, setRawInput] = useState('')
   const [fallbackFirst, setFallbackFirst] = useState('')
   const [fallbackLast, setFallbackLast] = useState('')
   const [fallbackDomain, setFallbackDomain] = useState('')
-  const [status, setStatus] = useState<QuickStatusKey>(null)
+
+  // Two-step state
+  const [step, setStep] = useState<QuickStep>('input')
+  const [preview, setPreview] = useState<EnrichPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [generatingLabel, setGeneratingLabel] = useState('Generating memo…')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const loading = status !== null
-
-  // Cycle through status messages while the API call runs
-  function startStatusCycle() {
-    setStatus('parsing')
-    timerRef.current = setTimeout(() => {
-      setStatus('enriching_people')
-      timerRef.current = setTimeout(() => {
-        setStatus('enriching_company')
-        timerRef.current = setTimeout(() => {
-          setStatus('generating')
-        }, 4000)
-      }, 5000)
-    }, 1200)
-  }
-
-  function stopStatusCycle() {
+  function clearTimers() {
     if (timerRef.current) clearTimeout(timerRef.current)
   }
 
-  useEffect(() => () => stopStatusCycle(), [])
+  useEffect(() => () => clearTimers(), [])
 
-  async function handleQuickGenerate(e: React.FormEvent) {
+  const hasInput = rawInput.trim().length > 0 || (fallbackFirst.trim() && fallbackLast.trim() && fallbackDomain.trim())
+
+  // ── Step 1: Enrich ──────────────────────────────────────────────────────────
+  async function handleEnrich(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    startStatusCycle()
+    setStep('enriching')
+
+    try {
+      const res = await fetch('/api/enrich-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawInput,
+          fallbackFirstName: fallbackFirst || undefined,
+          fallbackLastName: fallbackLast || undefined,
+          fallbackCompanyDomain: fallbackDomain || undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setStep('input')
+        setError(data.error ?? 'Enrichment failed. Try Manual Input.')
+        return
+      }
+
+      setPreview(data)
+      setStep('preview')
+    } catch (err: unknown) {
+      setStep('input')
+      setError((err as { message?: string })?.message ?? 'Network error. Please try again.')
+    }
+  }
+
+  // ── Step 2: Generate ────────────────────────────────────────────────────────
+  async function handleGenerate() {
+    if (!preview) return
+    setError(null)
+    setStep('generating')
+    setGeneratingLabel('Generating memo…')
+
+    // Cycle label while we wait
+    timerRef.current = setTimeout(() => setGeneratingLabel('Running web research…'), 5000)
+    timerRef.current = setTimeout(() => setGeneratingLabel('Writing your memo…'), 25000)
 
     try {
       const res = await fetch('/api/quick-generate-memo', {
@@ -86,55 +163,149 @@ function QuickInputTab() {
       })
 
       const data = await res.json()
-      stopStatusCycle()
+      clearTimers()
 
       if (!res.ok) {
-        setStatus(null)
-        setError(data.error ?? 'Something went wrong. Try the Manual Input tab.')
+        setStep('preview')
+        setError(data.error ?? 'Generation failed.')
         return
       }
 
       router.push(`/memo/${data.memoId}`)
     } catch (err: unknown) {
-      stopStatusCycle()
-      setStatus(null)
+      clearTimers()
+      setStep('preview')
       setError((err as { message?: string })?.message ?? 'Network error. Please try again.')
     }
   }
 
-  const currentStatusLabel = QUICK_STATUS_STEPS.find((s) => s.key === status)?.label ?? 'Loading…'
+  // ── Render ──────────────────────────────────────────────────────────────────
 
+  if (step === 'generating') {
+    return (
+      <div className="rounded-md bg-indigo-50 border border-indigo-200 p-6 text-center space-y-3">
+        <svg className="h-6 w-6 animate-spin text-indigo-600 mx-auto" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <p className="text-sm font-semibold text-indigo-800">{generatingLabel}</p>
+        <p className="text-xs text-indigo-600">Research + generation takes 60–90 seconds.</p>
+      </div>
+    )
+  }
+
+  if (step === 'preview' && preview) {
+    const primaryDomain = preview.primaryOrganization?.domain
+    return (
+      <div className="space-y-5">
+        {/* Preview header */}
+        <div className="card p-4 space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-800">Enrichment Preview</p>
+            <button
+              type="button"
+              onClick={() => { setStep('input'); setPreview(null); setError(null) }}
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
+            >
+              ← Edit input
+            </button>
+          </div>
+          <p className="text-xs text-gray-500">
+            Review what Apollo resolved. If it looks right, click Generate Memo.
+          </p>
+        </div>
+
+        {/* People */}
+        {preview.resolvedPeople.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              People ({preview.resolvedPeople.length})
+            </p>
+            {preview.resolvedPeople.map((p, i) => (
+              <PersonPreviewCard key={i} person={p} />
+            ))}
+          </div>
+        )}
+
+        {/* Organizations */}
+        {preview.resolvedOrganizations.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Company
+            </p>
+            {preview.resolvedOrganizations.map((o, i) => (
+              <OrgPreviewCard key={i} org={o} isPrimary={o.domain === primaryDomain} />
+            ))}
+          </div>
+        )}
+
+        {/* Unresolved */}
+        {preview.unresolvedInputs.length > 0 && (
+          <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+            <p className="text-xs font-semibold text-amber-800 mb-1">Could not fully resolve:</p>
+            <ul className="space-y-0.5">
+              {preview.unresolvedInputs.map((u, i) => (
+                <li key={i} className="text-xs text-amber-700">• {u}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-amber-600 mt-1">Memo will still generate using available data.</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-md bg-red-50 border border-red-200 p-3">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        {/* Confirm generate */}
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={handleGenerate} className="btn-primary">
+            ⚡ Generate Memo
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStep('input'); setPreview(null); setError(null) }}
+            className="btn-secondary"
+          >
+            Edit Input
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Default: input step (or enriching)
   return (
-    <form onSubmit={handleQuickGenerate} className="space-y-5">
+    <form onSubmit={handleEnrich} className="space-y-5">
       <div className="card p-6 space-y-4">
         <div>
           <label className="label">
-            Paste attendee emails, a meeting invite, or a prospect identifier
+            Paste emails, a LinkedIn URL, or a meeting invite
           </label>
           <textarea
             rows={6}
             value={rawInput}
             onChange={(e) => setRawInput(e.target.value)}
-            disabled={loading}
+            disabled={step === 'enriching'}
             placeholder={[
               'chris@colormatics.com',
               '',
-              'OR paste a meeting invite block:',
+              'OR a LinkedIn profile URL:',
+              'https://linkedin.com/in/chris-marcus-abc123',
               '',
-              'Intro call with Colormatics',
-              'Guests:',
-              'chris@colormatics.com',
-              'aaron@colormatics.com',
+              'OR paste a calendar invite block:',
+              'Guests: chris@colormatics.com, aaron@colormatics.com',
             ].join('\n')}
             className="input font-mono text-xs"
           />
           <p className="mt-1 text-xs text-gray-400">
-            Paste one or more work emails, or copy a calendar invite. Apollo will resolve name, title, and company automatically.
+            Work emails, LinkedIn profile URLs, or a copy-pasted calendar invite. Apollo resolves name, title, and company automatically.
           </p>
         </div>
 
         <div>
-          <p className="label text-gray-500">Fallback — only needed if no email is available</p>
+          <p className="label text-gray-500">Fallback — only needed if no email or LinkedIn URL</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="label text-xs text-gray-500">First Name</label>
@@ -142,7 +313,7 @@ function QuickInputTab() {
                 type="text"
                 value={fallbackFirst}
                 onChange={(e) => setFallbackFirst(e.target.value)}
-                disabled={loading}
+                disabled={step === 'enriching'}
                 placeholder="Chris"
                 className="input text-sm"
               />
@@ -153,7 +324,7 @@ function QuickInputTab() {
                 type="text"
                 value={fallbackLast}
                 onChange={(e) => setFallbackLast(e.target.value)}
-                disabled={loading}
+                disabled={step === 'enriching'}
                 placeholder="Marcus"
                 className="input text-sm"
               />
@@ -164,7 +335,7 @@ function QuickInputTab() {
                 type="text"
                 value={fallbackDomain}
                 onChange={(e) => setFallbackDomain(e.target.value)}
-                disabled={loading}
+                disabled={step === 'enriching'}
                 placeholder="colormatics.com"
                 className="input text-sm"
               />
@@ -175,7 +346,7 @@ function QuickInputTab() {
 
       {error && (
         <div className="rounded-md bg-red-50 border border-red-200 p-4">
-          <p className="text-sm font-medium text-red-800">Could not generate memo</p>
+          <p className="text-sm font-medium text-red-800">Could not enrich input</p>
           <p className="text-sm text-red-700 mt-1">{error}</p>
           <p className="text-xs text-red-500 mt-2">Try the Manual Input tab to enter details directly.</p>
         </div>
@@ -184,48 +355,22 @@ function QuickInputTab() {
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={loading || (!rawInput.trim() && !(fallbackFirst.trim() && fallbackLast.trim() && fallbackDomain.trim()))}
+          disabled={step === 'enriching' || !hasInput}
           className="btn-primary"
         >
-          {loading ? (
+          {step === 'enriching' ? (
             <>
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              {currentStatusLabel}
+              Enriching with Apollo…
             </>
           ) : (
-            '⚡ Enrich & Generate Memo'
+            '🔍 Enrich & Preview'
           )}
         </button>
       </div>
-
-      {loading && (
-        <div className="rounded-md bg-indigo-50 border border-indigo-200 p-4">
-          <p className="text-sm font-medium text-indigo-800">{currentStatusLabel}</p>
-          <p className="text-sm text-indigo-700 mt-1">
-            Apollo enrichment + research + memo generation takes about 60–90 seconds.
-          </p>
-          <div className="mt-3 flex gap-2 flex-wrap">
-            {QUICK_STATUS_STEPS.map((step) => (
-              <span
-                key={step.key}
-                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                  status === step.key
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : QUICK_STATUS_STEPS.findIndex((s) => s.key === status) >
-                      QUICK_STATUS_STEPS.findIndex((s) => s.key === step.key)
-                    ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
-                    : 'bg-white text-gray-400 border-gray-200'
-                }`}
-              >
-                {step.label.replace('…', '')}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </form>
   )
 }

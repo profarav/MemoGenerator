@@ -204,8 +204,9 @@ export interface ResolvedEnrichmentOutput {
 }
 
 export interface ParsedQuickInput {
-  inputType: 'emails' | 'meeting_invite_text' | 'name_domain_fallback' | 'unknown'
+  inputType: 'emails' | 'meeting_invite_text' | 'name_domain_fallback' | 'linkedin_urls' | 'unknown'
   extractedEmails: string[]
+  extractedLinkedInUrls: string[]
   fallbackPerson?: {
     firstName?: string
     lastName?: string

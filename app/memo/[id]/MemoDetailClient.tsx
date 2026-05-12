@@ -43,6 +43,7 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
   const [feedback, setFeedback] = useState('')
   const [showFeedback, setShowFeedback] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedClean, setCopiedClean] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [requestStatus, setRequestStatus] = useState(memoRequest.status)
 
@@ -131,6 +132,37 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function stripMarkdown(md: string): string {
+    return md
+      // Remove ATX headings: ## Heading → Heading
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remove bold/italic: **text** or __text__ or *text* or _text_
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/_([^_]+)_/g, '$1')
+      // Remove inline code: `code`
+      .replace(/`([^`]+)`/g, '$1')
+      // Convert links: [text](url) → text
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      // Remove horizontal rules: --- or *** or ___
+      .replace(/^[-*_]{3,}\s*$/gm, '')
+      // Remove bullet/numbered list markers: - item or * item or 1. item
+      .replace(/^[\s]*[-*+]\s+/gm, '')
+      .replace(/^[\s]*\d+\.\s+/gm, '')
+      // Collapse 3+ blank lines into 2
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+
+  async function handleCopyClean() {
+    if (!memo) return
+    const clean = stripMarkdown(memo.memo_markdown)
+    await navigator.clipboard.writeText(clean)
+    setCopiedClean(true)
+    setTimeout(() => setCopiedClean(false), 2000)
+  }
+
   const displayContent = isEditing ? editContent : (memo?.memo_markdown ?? '')
 
   return (
@@ -179,7 +211,10 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
                   </button>
                 )}
                 <button onClick={handleCopy} className="btn-secondary text-xs">
-                  {copied ? 'Copied!' : 'Copy'}
+                  {copied ? 'Copied!' : 'Copy markdown'}
+                </button>
+                <button onClick={handleCopyClean} className="btn-secondary text-xs">
+                  {copiedClean ? 'Copied!' : 'Copy plain text'}
                 </button>
               </>
             )}

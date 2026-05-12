@@ -156,6 +156,39 @@ export async function enrichPersonByEmail(email: string): Promise<ApolloPersonRe
   }
 }
 
+export async function enrichPersonByLinkedIn(linkedinUrl: string): Promise<ApolloPersonResult | null> {
+  // Normalize to bare https://linkedin.com/in/<slug>
+  const normalized = linkedinUrl.replace(/^http:/, 'https:').replace('://www.', '://').split('?')[0].replace(/\/+$/, '')
+  const lookupKey = `linkedin:${normalized.toLowerCase()}`
+
+  const cached = await getCachedPerson(lookupKey)
+  if (cached) {
+    console.log(`[apollo] Cache hit for ${lookupKey}`)
+    return cached
+  }
+
+  console.log(`[apollo] enrichPersonByLinkedIn: ${normalized}`)
+  try {
+    const res = await fetch(`${APOLLO_BASE}/people/match`, {
+      method: 'POST',
+      headers: postHeaders(),
+      body: JSON.stringify({ linkedin_url: normalized }),
+    })
+    const body = await res.text()
+    if (!res.ok) return handleApolloError(res.status, body, `linkedin:${normalized}`)
+
+    const data = JSON.parse(body)
+    const person: ApolloPersonResult | null = data?.person ?? null
+    if (person) await setCachedPerson(lookupKey, person.email ?? null, person)
+    return person
+  } catch (err: unknown) {
+    const e = err as { message?: string }
+    if (e?.message?.includes('APOLLO_API_KEY') || e?.message?.includes('rate limit')) throw err
+    console.error(`[apollo] enrichPersonByLinkedIn failed for ${normalized}:`, e?.message)
+    return null
+  }
+}
+
 export async function enrichPersonByNameAndDomain(
   firstName: string,
   lastName: string,
