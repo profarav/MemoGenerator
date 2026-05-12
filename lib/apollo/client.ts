@@ -19,10 +19,19 @@ function getApiKey(): string {
   return key
 }
 
-function authHeaders() {
+// Apollo REST API authenticates via X-Api-Key header (not Bearer token)
+function postHeaders() {
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${getApiKey()}`,
+    'Cache-Control': 'no-cache',
+    'X-Api-Key': getApiKey(),
+  }
+}
+
+function getHeaders() {
+  return {
+    'Cache-Control': 'no-cache',
+    'X-Api-Key': getApiKey(),
   }
 }
 
@@ -129,7 +138,7 @@ export async function enrichPersonByEmail(email: string): Promise<ApolloPersonRe
   try {
     const res = await fetch(`${APOLLO_BASE}/people/match`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: postHeaders(),
       body: JSON.stringify({ email }),
     })
     const body = await res.text()
@@ -165,7 +174,7 @@ export async function enrichPersonByNameAndDomain(
   try {
     const res = await fetch(`${APOLLO_BASE}/people/match`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: postHeaders(),
       body: JSON.stringify({ first_name: firstName, last_name: lastName, domain }),
     })
     const body = await res.text()
@@ -215,7 +224,7 @@ export async function enrichPeopleBulkByEmails(emails: string[]): Promise<Apollo
     try {
       const res = await fetch(`${APOLLO_BASE}/people/bulk_match`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: postHeaders(),
         body: JSON.stringify({ details: chunk.map((email) => ({ email })) }),
       })
       const body = await res.text()
@@ -258,7 +267,7 @@ export async function enrichOrganizationByDomain(rawDomain: string): Promise<Apo
     const url = `${APOLLO_BASE}/organizations/enrich?domain=${encodeURIComponent(domain)}`
     const res = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(),
+      headers: getHeaders(),
     })
     const body = await res.text()
     if (!res.ok) return handleApolloError(res.status, body, `org:${domain}`)
