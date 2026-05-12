@@ -113,7 +113,6 @@ function QuickInputTab() {
           </label>
           <textarea
             rows={6}
-            required
             value={rawInput}
             onChange={(e) => setRawInput(e.target.value)}
             disabled={loading}
@@ -183,7 +182,11 @@ function QuickInputTab() {
       )}
 
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={loading || !rawInput.trim()} className="btn-primary">
+        <button
+          type="submit"
+          disabled={loading || (!rawInput.trim() && !(fallbackFirst.trim() && fallbackLast.trim() && fallbackDomain.trim()))}
+          className="btn-primary"
+        >
           {loading ? (
             <>
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
