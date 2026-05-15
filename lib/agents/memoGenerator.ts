@@ -28,9 +28,10 @@ What makes a memo bad:
 - Starting with the company's marketing copy
 - Describing a prior product as "unclear" without explaining what it appeared to do
 - Writing "Why it matters: he manages multiple companies" — that is not relevance
-- Generic hooks like "What are your AI plans?" or "Tell me about your company"
-- Speculation without evidence (acquisitions, market entry, "strategic fit")
-- Long company background sections that Hugh could find on their website himself`
+- Describing a company with words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation" — these tell Hugh nothing
+- Using the company's own tagline or About page as the company description
+- Saying a company "helps brands tell their story" or "delivers impactful experiences" — those are not descriptions, they are slogans
+- Speculation without evidence (acquisitions, market entry, "strategic fit")`
 
 function depthNote(depth: string): string {
   if (depth === 'bare') return 'Keep it brief — 2 bullets max per section. Skip elaboration.'
@@ -215,34 +216,18 @@ If nothing was found: "No confirmed prior startups or products found in research
 Do NOT skip this section. If status is unclear, still include the product and explain why it is interesting.
 
 ## 4. Current Company
-Start with one plain-English sentence: "[Company] helps [customer type] do [main job] through [product/service]."
-Then add: what they build, who they serve, notable clients or products, anything differentiated. Keep this shorter than the person sections.
+Explain concretely what this company does — not marketing language, but how it actually works.
 
-## 5. Interesting Signals
-Recent launches, hiring, AI initiatives, product pivots, press coverage, or anything that caught your attention in the research. If nothing notable: say so briefly.
+Cover:
+- **What they sell or build**: name the actual product or service in plain terms (e.g. "a video production company that makes brand commercials," not "a creative agency"). If it is software, say what the software does. If it is a service, say what the service delivers.
+- **Who their customers are**: specific industries, company sizes, or buyer types — not "brands" or "enterprises."
+- **How the business works**: agency? SaaS? Marketplace? Retainer? Project-based? Be direct.
+- **Scale or traction**: employee count, known clients, geographic reach, or revenue signals if found in research. If nothing was found, say so.
+- **Anything differentiated**: one thing that makes them different from competitors in the same space, based on research — not their own marketing claim.
 
-## 6. Why This Person Matters for This Meeting
-2–3 grounded sentences using specific facts from research. Format: "[Person] is relevant because [specific thing], which connects to [specific thing Hugh cares about or the meeting goal]." No speculation. No "potential acquisition target" unless internal context supports it.
+Do not use words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation." If you cannot describe what they do without those words, say what is unclear and what was searched.
 
-## 7. Human Conversation Hooks
-4–6 specific, natural openers for Hugh — based only on real research findings.
-
-Use these formats:
-- "I saw you previously built [X] — what did you learn from that?"
-- "It looks like [X] may no longer be active — what happened there?"
-- "You've worked across [role A] and [role B] — how do those connect for you?"
-- "I noticed you're hiring for [role] — what problem are you trying to solve?"
-- "[X] seems related to [theme] — is that a fair comparison?"
-
-Do not invent hooks. Only use facts found in research.
-
-## 8. Suggested Questions
-5–7 tactical questions about the business: what they're building, who they serve, AI direction, partnership potential, timeline, or next steps. Make them specific to this person and company.
-
-## 9. Internal Context Notes
-Summarize relevant internal context if provided. If none: "No internal context provided."
-
-## 10. Sources Checked
+## 5. Sources Checked
 List each: Title — URL`
 
   return callClaude(SYSTEM_PROMPT, user, 6000)
