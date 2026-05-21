@@ -89,6 +89,7 @@ function QuickInputTab() {
   const [fallbackFirst, setFallbackFirst] = useState('')
   const [fallbackLast, setFallbackLast] = useState('')
   const [fallbackDomain, setFallbackDomain] = useState('')
+  const [knownContext, setKnownContext] = useState('')
 
   // Two-step state
   const [step, setStep] = useState<QuickStep>('input')
@@ -159,6 +160,7 @@ function QuickInputTab() {
           fallbackFirstName: fallbackFirst || undefined,
           fallbackLastName: fallbackLast || undefined,
           fallbackCompanyDomain: fallbackDomain || undefined,
+          knownContext: knownContext || undefined,
         }),
       })
 
@@ -302,6 +304,18 @@ function QuickInputTab() {
           <p className="mt-1 text-xs text-gray-400">
             Work emails, LinkedIn profile URLs, or a copy-pasted calendar invite. Apollo resolves name, title, and company automatically.
           </p>
+        </div>
+
+        <div>
+          <label className="label">What are you specifically looking for? <span className="text-gray-400">(optional)</span></label>
+          <textarea
+            rows={2}
+            value={knownContext}
+            onChange={(e) => setKnownContext(e.target.value)}
+            disabled={step === 'enriching'}
+            placeholder="e.g. Hugh wants to know if they've raised recently. Looking for any connection to video production or AI content tools."
+            className="input text-sm"
+          />
         </div>
 
         <div>
