@@ -200,10 +200,10 @@ Write the memo using EXACTLY this structure. Do not add sections. Do not skip se
 # Meeting Prep Memo: ${memoRequest.company_name}
 
 ## 1. Quick Summary
-3–5 sentences. Lead with the person, not the company. Answer: who is this person, what makes their background interesting, and why does this meeting matter to Hugh? Write it like a smart colleague briefing Hugh in the hallway — specific, not generic.
+3–5 sentences. Lead with the person, not the company. Who are they, what makes their background interesting? Write it like a smart colleague briefing Hugh in the hallway — specific, not generic.
 
 ## 2. Person Background
-For each attendee: current role, how they got there, education if relevant, and any non-obvious career details. Be specific. Real names of companies, universities, or products.
+For each attendee: current role, how they got there, education if relevant, and any non-obvious career details. Be specific. Real names of companies, universities, or products. Do not repeat facts already stated in the Quick Summary — go deeper or move on.
 
 ## 3. Previous Companies & Products
 For each prior startup, app, or product found:
@@ -211,14 +211,13 @@ For each prior startup, app, or product found:
   - What it did: [plain English description]
   - Who it served: [target user or customer]
   - Current status: [active / shut down / acquired / unclear — with any available evidence]
-  - Why it matters: [connect it specifically to this meeting, Hugh's world, or a relevant theme]
 
-If nothing was found: "No confirmed prior startups or products found in research. [Note any gaps or what was searched.]"
+If nothing was found: "No confirmed prior startups or products found in research."
 
-Do NOT skip this section. If status is unclear, still include the product and explain why it is interesting.
+Do NOT skip this section. If status is unclear, still include the product.
 
 ## 4. Current Company
-Explain concretely what this company does — not marketing language, but how it actually works.
+Explain concretely what this company does — not marketing language, but how it actually works. Do not repeat facts about the person already covered in sections 1–2.
 
 Cover:
 - **What they sell or build**: name the actual product or service in plain terms (e.g. "a video production company that makes brand commercials," not "a creative agency"). If it is software, say what the software does. If it is a service, say what the service delivers.
