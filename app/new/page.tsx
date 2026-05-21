@@ -307,15 +307,16 @@ function QuickInputTab() {
         </div>
 
         <div>
-          <label className="label">What are you specifically looking for? <span className="text-gray-400">(optional)</span></label>
+          <label className="label">Focus <span className="text-gray-400">(optional)</span></label>
           <textarea
             rows={2}
             value={knownContext}
             onChange={(e) => setKnownContext(e.target.value)}
             disabled={step === 'enriching'}
-            placeholder="e.g. Hugh wants to know if they've raised recently. Looking for any connection to video production or AI content tools."
+            placeholder="e.g. Focus on their AI initiatives. Focus on the founder's background before this company. Focus on whether they've raised recently."
             className="input text-sm"
           />
+          <p className="mt-1 text-xs text-gray-400">Tell the memo what to prioritize — it will lead with this.</p>
         </div>
 
         <div>

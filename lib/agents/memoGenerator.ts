@@ -181,10 +181,12 @@ COMPANY FACTS:
 RECENT SIGNALS:
 - ${signals}
 
+${memoRequest.known_context ? `---
+⚠️ FOCUS INSTRUCTION — Patrick specifically wants this memo to prioritize:
+"${memoRequest.known_context}"
+Lead the Quick Summary with this. Make sure section 4 addresses it directly if relevant. Do not bury it.
+` : ''}
 ---
-KNOWN CONTEXT (Patrick):
-${memoRequest.known_context ?? 'None.'}
-
 INTERNAL CONTEXT (emails/Slack/Granola):
 ${memoRequest.internal_context ?? 'None provided.'}
 
