@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { supabase, describeDbError } from '@/lib/supabase'
 import { Attendee, MeetingType, MemoDepth, ResolvedPerson, ResolvedOrganization } from '@/types'
 
 // ─── Attendee parser (used by manual form) ──────────────────────────────────
@@ -96,13 +96,6 @@ function QuickInputTab() {
   const [preview, setPreview] = useState<EnrichPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [generatingLabel, setGeneratingLabel] = useState('Generating memo…')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function clearTimers() {
-    if (timerRef.current) clearTimeout(timerRef.current)
-  }
-
-  useEffect(() => () => clearTimers(), [])
 
   const hasInput = rawInput.trim().length > 0 || (fallbackFirst.trim() && fallbackLast.trim() && fallbackDomain.trim())
 
@@ -141,15 +134,13 @@ function QuickInputTab() {
   }
 
   // ── Step 2: Generate ────────────────────────────────────────────────────────
+  // Generation now runs in the background: this call returns within seconds with
+  // a memoId, and the memo page shows live progress while the pipeline runs.
   async function handleGenerate() {
     if (!preview) return
     setError(null)
     setStep('generating')
-    setGeneratingLabel('Generating memo…')
-
-    // Cycle label while we wait
-    timerRef.current = setTimeout(() => setGeneratingLabel('Running web research…'), 5000)
-    timerRef.current = setTimeout(() => setGeneratingLabel('Writing your memo…'), 25000)
+    setGeneratingLabel('Starting memo generation…')
 
     try {
       const res = await fetch('/api/quick-generate-memo', {
@@ -165,7 +156,6 @@ function QuickInputTab() {
       })
 
       const data = await res.json()
-      clearTimers()
 
       if (!res.ok) {
         setStep('preview')
@@ -175,7 +165,6 @@ function QuickInputTab() {
 
       router.push(`/memo/${data.memoId}`)
     } catch (err: unknown) {
-      clearTimers()
       setStep('preview')
       setError((err as { message?: string })?.message ?? 'Network error. Please try again.')
     }
@@ -191,7 +180,7 @@ function QuickInputTab() {
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
         <p className="text-sm font-semibold text-indigo-800">{generatingLabel}</p>
-        <p className="text-xs text-indigo-600">Research + generation takes 60–90 seconds.</p>
+        <p className="text-xs text-indigo-600">You&apos;ll be taken to the memo page to watch progress.</p>
       </div>
     )
   }
@@ -439,9 +428,11 @@ function ManualInputTab() {
         .single()
 
       if (insertError || !memoRequest) {
-        throw new Error(insertError?.message ?? 'Failed to save memo request')
+        throw new Error(`Failed to save memo request: ${describeDbError(insertError?.message)}`)
       }
 
+      // Kicks off background generation and returns immediately; the memo page
+      // shows live progress while the pipeline runs.
       const genRes = await fetch('/api/generate-memo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

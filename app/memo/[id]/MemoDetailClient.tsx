@@ -1,9 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { MemoRequest, GeneratedMemo, ResearchSource } from '@/types'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import MemoSections from '@/components/MemoSections'
+
+// If a request has been 'generating' longer than this, assume the background
+// job died (e.g. hit the platform time limit) and offer a retry. Slightly
+// above the routes' maxDuration (300s) so a slow-but-alive run isn't flagged.
+const GENERATION_STALL_MS = 6 * 60 * 1000
 
 const MEETING_TYPE_LABELS: Record<string, string> = {
   prospect_intro: 'Prospect Intro',
@@ -19,9 +25,15 @@ function StatusBadge({ status }: { status: string }) {
       ? 'status-approved'
       : status === 'needs_review'
         ? 'status-needs_review'
-        : 'status-draft'
+        : status === 'generating'
+          ? 'status-generating'
+          : status === 'failed'
+            ? 'status-failed'
+            : 'status-draft'
   const labels: Record<string, string> = {
     draft: 'Draft',
+    generating: 'Generating…',
+    failed: 'Failed',
     approved: 'Approved',
     needs_review: 'Needs Review',
   }
@@ -35,6 +47,7 @@ interface Props {
 }
 
 export default function MemoDetailClient({ memoRequest, latestMemo, sources }: Props) {
+  const router = useRouter()
   const [memo, setMemo] = useState<GeneratedMemo | null>(latestMemo)
   const [editContent, setEditContent] = useState(latestMemo?.memo_markdown ?? '')
   const [isEditing, setIsEditing] = useState(false)
@@ -48,6 +61,7 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
   const [error, setError] = useState<string | null>(null)
   const [requestStatus, setRequestStatus] = useState(memoRequest.status)
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null)
+  const [stalled, setStalled] = useState(false)
 
   async function handleRegenerateSection(sectionTitle: string, focus: string) {
     if (!memo) return
@@ -71,6 +85,57 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
       setError((e as { message?: string })?.message ?? 'Failed to regenerate section')
     } finally {
       setRegeneratingSection(null)
+    }
+  }
+
+  // While generation runs in the background, poll the request status and pull
+  // in the finished memo (via a server-component refresh) when it flips.
+  useEffect(() => {
+    if (requestStatus !== 'generating') return
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/memo-request/${memoRequest.id}`)
+        if (!res.ok) return
+        const data = await res.json()
+        const status = data.memoRequest?.status
+        if (status && status !== 'generating') {
+          clearInterval(interval)
+          setRequestStatus(status)
+          if (status !== 'failed') router.refresh()
+          return
+        }
+        // Stall detection: updated_at is set when generation starts, so if it's
+        // been 'generating' too long the background job likely died.
+        const startedAt = new Date(data.memoRequest?.updated_at ?? Date.now()).getTime()
+        if (Date.now() - startedAt > GENERATION_STALL_MS) {
+          clearInterval(interval)
+          setStalled(true)
+        }
+      } catch {
+        // Transient network error — keep polling.
+      }
+    }, 4000)
+
+    return () => clearInterval(interval)
+  }, [requestStatus, memoRequest.id, router])
+
+  // Kick off (or retry) generation for this request.
+  async function handleStartGeneration() {
+    setError(null)
+    setStalled(false)
+    setRequestStatus('generating')
+    try {
+      const res = await fetch('/api/generate-memo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memoRequestId: memoRequest.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+    } catch (e: unknown) {
+      setRequestStatus('failed')
+      setError((e as { message?: string })?.message ?? 'Failed to start generation')
     }
   }
 
@@ -318,9 +383,35 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
                 )}
               </div>
             </div>
+          ) : requestStatus === 'generating' && !stalled ? (
+            <div className="card p-10 text-center space-y-3">
+              <svg className="h-6 w-6 animate-spin text-indigo-600 mx-auto" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-sm font-semibold text-indigo-800">Researching &amp; writing your memo…</p>
+              <p className="text-xs text-gray-500">
+                This usually takes 1–2 minutes. You can leave this page — the memo will be here when you come back.
+              </p>
+            </div>
+          ) : requestStatus === 'failed' || stalled ? (
+            <div className="card p-10 text-center space-y-3">
+              <p className="text-sm font-semibold text-red-700">
+                {stalled ? 'Generation is taking longer than expected and may have failed.' : 'Memo generation failed.'}
+              </p>
+              <p className="text-xs text-gray-500">
+                This can happen if a research step errored or timed out. Retrying usually works.
+              </p>
+              <button onClick={handleStartGeneration} className="btn-primary text-xs">
+                Retry generation
+              </button>
+            </div>
           ) : (
-            <div className="card p-10 text-center text-gray-400">
+            <div className="card p-10 text-center space-y-3 text-gray-400">
               <p className="text-sm">No memo generated yet.</p>
+              <button onClick={handleStartGeneration} className="btn-primary text-xs">
+                Generate memo
+              </button>
             </div>
           )}
         </div>

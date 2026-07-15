@@ -42,4 +42,10 @@
   .status-needs_review {
     @apply inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-800 border border-red-200;
   }
+  .status-generating {
+    @apply inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-800 border border-indigo-200;
+  }
+  .status-failed {
+    @apply inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-800 border border-red-200;
+  }
 }

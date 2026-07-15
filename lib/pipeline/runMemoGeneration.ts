@@ -145,3 +145,26 @@ export async function runMemoGeneration(memoRequestId: string): Promise<{
 
   return { memo: savedMemo as GeneratedMemo, sources: allSources }
 }
+
+/**
+ * Background-safe wrapper: runs the pipeline and, on any failure, marks the
+ * memo_request as 'failed' so the UI can show an error + retry instead of
+ * spinning forever. Used with waitUntil() — never throws.
+ */
+export async function runMemoGenerationInBackground(memoRequestId: string): Promise<void> {
+  try {
+    await runMemoGeneration(memoRequestId)
+    console.log(`[runMemoGeneration] Background generation complete for ${memoRequestId}`)
+  } catch (err) {
+    console.error(`[runMemoGeneration] Background generation failed for ${memoRequestId}:`, err)
+    try {
+      await supabaseAdmin
+        .from('memo_requests')
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', memoRequestId)
+    } catch (updateErr) {
+      // If even the status update fails (e.g. DB unreachable), all we can do is log.
+      console.error(`[runMemoGeneration] Could not mark ${memoRequestId} as failed:`, updateErr)
+    }
+  }
+}

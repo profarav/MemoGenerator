@@ -16,7 +16,7 @@ create table if not exists memo_requests (
   known_context     text,
   internal_context  text,
   memo_depth        text default 'standard',  -- bare | standard | detailed
-  status            text default 'draft',      -- draft | approved | needs_review
+  status            text default 'draft',      -- draft | generating | failed | approved | needs_review
   created_at        timestamptz default now(),
   updated_at        timestamptz default now()
 );

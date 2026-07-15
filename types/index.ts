@@ -7,7 +7,7 @@ export type MeetingType =
 
 export type MemoDepth = 'bare' | 'standard' | 'detailed'
 
-export type MemoStatus = 'draft' | 'approved' | 'needs_review'
+export type MemoStatus = 'draft' | 'generating' | 'failed' | 'approved' | 'needs_review'
 
 export type ReviewStatus = 'draft' | 'approved' | 'needs_review'
 

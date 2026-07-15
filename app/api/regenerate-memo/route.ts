@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, describeDbError } from '@/lib/supabase'
 import { summarizeSources } from '@/lib/agents/researchSummarizer'
 import { mapRelevance } from '@/lib/agents/relevanceMapper'
 import { generateMemo } from '@/lib/agents/memoGenerator'
 import { MemoRequest, ResearchSource } from '@/types'
+
+// Regeneration runs synchronously (the user watches an inline spinner); it
+// skips web research but still makes three model calls, so give it headroom.
+// Requires Fluid Compute or Pro; if the deploy rejects this, lower it to 60.
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,8 +65,11 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (memoError) {
-      console.error('[regenerate-memo] Failed to save:', memoError.message)
-      return NextResponse.json({ error: 'Failed to save regenerated memo' }, { status: 500 })
+      console.error('[regenerate-memo] Failed to save:', memoError)
+      return NextResponse.json(
+        { error: `Failed to save regenerated memo: ${describeDbError(memoError.message)}` },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ memo: savedMemo })

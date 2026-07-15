@@ -41,6 +41,9 @@ export default async function MemoDetailPage({ params }: Props) {
 
   return (
     <MemoDetailClient
+      // Remount when generation finishes (status flips / memo appears) so the
+      // client picks up fresh props after router.refresh() from the polling loop.
+      key={`${memoRequest.status}-${latestMemo?.id ?? 'none'}`}
       memoRequest={memoRequest}
       latestMemo={latestMemo}
       sources={sources}

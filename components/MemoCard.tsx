@@ -3,6 +3,8 @@ import { MemoRequest } from '@/types'
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
+  generating: 'Generating…',
+  failed: 'Failed',
   approved: 'Approved',
   needs_review: 'Needs Review',
 }
@@ -21,7 +23,11 @@ function StatusBadge({ status }: { status: string }) {
       ? 'status-approved'
       : status === 'needs_review'
         ? 'status-needs_review'
-        : 'status-draft'
+        : status === 'generating'
+          ? 'status-generating'
+          : status === 'failed'
+            ? 'status-failed'
+            : 'status-draft'
   return <span className={cls}>{STATUS_LABELS[status] ?? status}</span>
 }
 

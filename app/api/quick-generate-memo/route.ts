@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { waitUntil } from '@vercel/functions'
+import { supabaseAdmin, describeDbError } from '@/lib/supabase'
 import { resolveQuickMemoInput } from '@/lib/enrichment/resolveQuickMemoInput'
 import { mapResolvedInputToMemoRequest } from '@/lib/enrichment/mapResolvedInputToMemoRequest'
-import { runMemoGeneration } from '@/lib/pipeline/runMemoGeneration'
+import { runMemoGenerationInBackground } from '@/lib/pipeline/runMemoGeneration'
 import { MeetingType, MemoDepth } from '@/types'
+
+// Allow the background pipeline (kept alive via waitUntil) to finish — full
+// generation takes ~1-3 minutes. Requires Fluid Compute (default on current
+// Vercel projects) or Pro; if the deploy rejects this value, lower it to 60.
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   try {
@@ -76,29 +82,34 @@ export async function POST(req: NextRequest) {
       internalContext,
     })
 
-    // 3. Save memo_request to DB
+    // 3. Save memo_request to DB with status 'generating' — the client redirects to
+    // the memo page immediately and polls until the pipeline finishes.
     const { data: memoRequest, error: insertError } = await supabaseAdmin
       .from('memo_requests')
-      .insert(memoRequestData)
+      .insert({ ...memoRequestData, status: 'generating' })
       .select()
       .single()
 
     if (insertError || !memoRequest) {
-      console.error('[quick-generate-memo] Failed to insert memo_request:', insertError?.message)
-      return NextResponse.json({ error: 'Failed to save memo request' }, { status: 500 })
+      console.error('[quick-generate-memo] Failed to insert memo_request:', insertError)
+      return NextResponse.json(
+        { error: `Failed to save memo request: ${describeDbError(insertError?.message)}` },
+        { status: 500 }
+      )
     }
 
-    console.log(`[quick-generate-memo] Saved memo_request ${memoRequest.id}, running pipeline...`)
+    console.log(`[quick-generate-memo] Saved memo_request ${memoRequest.id}, dispatching pipeline...`)
 
-    // 4. Run the existing unchanged memo generation pipeline
-    const { memo } = await runMemoGeneration(memoRequest.id)
+    // 4. Run the pipeline in the background (waitUntil keeps the function alive
+    // after the response is sent). Failures mark the request as 'failed'.
+    waitUntil(runMemoGenerationInBackground(memoRequest.id))
 
     return NextResponse.json({
       memoId: memoRequest.id,
+      status: 'generating',
       resolvedPeople: resolved.resolvedPeople,
       resolvedOrganizations: resolved.resolvedOrganizations,
       unresolvedInputs: resolved.unresolvedInputs,
-      memo,
     })
   } catch (err: unknown) {
     const error = err as { message?: string }
