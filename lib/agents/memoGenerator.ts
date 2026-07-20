@@ -1,7 +1,7 @@
 import { callClaude } from '@/lib/anthropic'
 import { MemoRequest, ResearchSource, ResearchSummary, RelevanceMap } from '@/types'
 
-const SYSTEM_PROMPT = `You are writing a meeting prep memo for Hugh.
+export const SYSTEM_PROMPT = `You are writing a meeting prep memo for Hugh.
 
 The memo's job is to make Hugh feel like a smart human researcher briefed him — not like an AI summarized a company website.
 
@@ -32,6 +32,63 @@ What makes a memo bad:
 - Using the company's own tagline or About page as the company description
 - Saying a company "helps brands tell their story" or "delivers impactful experiences" — those are not descriptions, they are slogans
 - Speculation without evidence (acquisitions, market entry, "strategic fit")`
+
+export interface MemoSectionSpec {
+  number: number
+  title: string
+  /** The writing instructions for this section, used verbatim in both full
+   *  generation and single-section regeneration so the two can't drift. */
+  instructions: string
+}
+
+export const MEMO_SECTION_SPECS: MemoSectionSpec[] = [
+  {
+    number: 1,
+    title: 'Quick Summary',
+    instructions: `3–5 sentences. Lead with the person, not the company. Who are they, what makes their background interesting? Write it like a smart colleague briefing Hugh in the hallway — specific, not generic.`,
+  },
+  {
+    number: 2,
+    title: 'Person Background',
+    instructions: `For each attendee: current role, how they got there, education if relevant, and any non-obvious career details. Be specific. Real names of companies, universities, or products. Do not repeat facts already stated in the Quick Summary — go deeper or move on.`,
+  },
+  {
+    number: 3,
+    title: 'Previous Companies & Products',
+    instructions: `For each prior startup, app, or product found:
+- **[Product/Company Name]** *(confirmed / likely / unclear)*
+  - What it did: [plain English description]
+  - Who it served: [target user or customer]
+  - Current status: [active / shut down / acquired / unclear — with any available evidence]
+
+If nothing was found: "No confirmed prior startups or products found in research."
+
+Do NOT skip this section. If status is unclear, still include the product.`,
+  },
+  {
+    number: 4,
+    title: 'Current Company',
+    instructions: `Explain concretely what this company does — not marketing language, but how it actually works. Do not repeat facts about the person already covered in sections 1–2.
+
+Cover:
+- **What they sell or build**: name the actual product or service in plain terms (e.g. "a video production company that makes brand commercials," not "a creative agency"). If it is software, say what the software does. If it is a service, say what the service delivers.
+- **Who their customers are**: specific industries, company sizes, or buyer types — not "brands" or "enterprises."
+- **How the business works**: agency? SaaS? Marketplace? Retainer? Project-based? Be direct.
+- **Scale or traction**: employee count, known clients, geographic reach, or revenue signals if found in research. If nothing was found, say so.
+- **Anything differentiated**: one thing that makes them different from competitors in the same space, based on research — not their own marketing claim.
+
+Do not use words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation." If you cannot describe what they do without those words, say what is unclear and what was searched.`,
+  },
+  {
+    number: 5,
+    title: 'Sources Checked',
+    instructions: `List each: Title — URL`,
+  },
+]
+
+export function findSectionSpec(sectionNumber: number): MemoSectionSpec | undefined {
+  return MEMO_SECTION_SPECS.find((s) => s.number === sectionNumber)
+}
 
 function depthNote(depth: string): string {
   if (depth === 'bare') return 'Keep it brief — 2 bullets max per section. Skip elaboration.'
@@ -199,37 +256,7 @@ Write the memo using EXACTLY this structure. Do not add sections. Do not skip se
 
 # Meeting Prep Memo: ${memoRequest.company_name}
 
-## 1. Quick Summary
-3–5 sentences. Lead with the person, not the company. Who are they, what makes their background interesting? Write it like a smart colleague briefing Hugh in the hallway — specific, not generic.
-
-## 2. Person Background
-For each attendee: current role, how they got there, education if relevant, and any non-obvious career details. Be specific. Real names of companies, universities, or products. Do not repeat facts already stated in the Quick Summary — go deeper or move on.
-
-## 3. Previous Companies & Products
-For each prior startup, app, or product found:
-- **[Product/Company Name]** *(confirmed / likely / unclear)*
-  - What it did: [plain English description]
-  - Who it served: [target user or customer]
-  - Current status: [active / shut down / acquired / unclear — with any available evidence]
-
-If nothing was found: "No confirmed prior startups or products found in research."
-
-Do NOT skip this section. If status is unclear, still include the product.
-
-## 4. Current Company
-Explain concretely what this company does — not marketing language, but how it actually works. Do not repeat facts about the person already covered in sections 1–2.
-
-Cover:
-- **What they sell or build**: name the actual product or service in plain terms (e.g. "a video production company that makes brand commercials," not "a creative agency"). If it is software, say what the software does. If it is a service, say what the service delivers.
-- **Who their customers are**: specific industries, company sizes, or buyer types — not "brands" or "enterprises."
-- **How the business works**: agency? SaaS? Marketplace? Retainer? Project-based? Be direct.
-- **Scale or traction**: employee count, known clients, geographic reach, or revenue signals if found in research. If nothing was found, say so.
-- **Anything differentiated**: one thing that makes them different from competitors in the same space, based on research — not their own marketing claim.
-
-Do not use words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation." If you cannot describe what they do without those words, say what is unclear and what was searched.
-
-## 5. Sources Checked
-List each: Title — URL`
+${MEMO_SECTION_SPECS.map((s) => `## ${s.number}. ${s.title}\n${s.instructions}`).join('\n\n')}`
 
   return callClaude(SYSTEM_PROMPT, user, 6000)
 }

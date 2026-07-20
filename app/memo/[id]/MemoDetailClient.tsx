@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { MemoRequest, GeneratedMemo, ResearchSource } from '@/types'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
+import MemoSections from '@/components/MemoSections'
 
 const MEETING_TYPE_LABELS: Record<string, string> = {
   prospect_intro: 'Prospect Intro',
@@ -46,6 +47,32 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
   const [copiedClean, setCopiedClean] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [requestStatus, setRequestStatus] = useState(memoRequest.status)
+  const [regeneratingSection, setRegeneratingSection] = useState<number | null>(null)
+
+  async function handleRegenerateSection(sectionNumber: number, focus: string) {
+    if (!memo) return
+    setRegeneratingSection(sectionNumber)
+    setError(null)
+    try {
+      const res = await fetch('/api/regenerate-section', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memoId: memo.id,
+          sectionNumber,
+          focus: focus || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setMemo(data.memo)
+      setEditContent(data.memo.memo_markdown)
+    } catch (e: unknown) {
+      setError((e as { message?: string })?.message ?? 'Failed to regenerate section')
+    } finally {
+      setRegeneratingSection(null)
+    }
+  }
 
   async function handleSave() {
     if (!memo) return
@@ -231,14 +258,19 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
       {/* Regenerate feedback box */}
       {showFeedback && (
         <div className="mb-6 card p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Feedback for regeneration (optional)</p>
+          <p className="text-sm font-medium text-gray-700">
+            Regenerate the whole memo with a focus on… (optional)
+          </p>
           <textarea
             rows={2}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="e.g. Focus more on their recent Series B and product expansion..."
+            placeholder="e.g. Focus on their recent Series B and product expansion."
             className="input text-sm"
           />
+          <p className="text-xs text-gray-400">
+            To change just one part, hover a section in the memo and use its Regenerate button instead.
+          </p>
           <div className="flex gap-2">
             <button onClick={handleRegenerate} disabled={regenerating} className="btn-primary text-xs">
               {regenerating ? (
@@ -277,7 +309,12 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
                     className="input font-mono text-xs w-full min-h-[600px] resize-y"
                   />
                 ) : (
-                  <MarkdownRenderer content={displayContent} />
+                  <MemoSections
+                    content={displayContent}
+                    regeneratingSection={regeneratingSection}
+                    onRegenerateSection={handleRegenerateSection}
+                    disabled={regenerating || saving}
+                  />
                 )}
               </div>
             </div>
