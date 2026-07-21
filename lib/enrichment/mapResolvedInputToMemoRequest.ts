@@ -50,17 +50,20 @@ export function mapResolvedInputToMemoRequest(
     const name = p.fullName ?? p.firstName ?? p.inputEmail ?? 'Unknown'
     const title = p.title
     const email = p.inputEmail
+    const linkedinUrl = p.linkedinUrl
 
     // Build the "raw" string in the format the existing parser already expects:
     // "Name — Title — email"  (matching parseAttendees in app/new/page.tsx)
     const rawParts = [name]
     if (title) rawParts.push(title)
     if (email) rawParts.push(email)
+    if (linkedinUrl) rawParts.push(linkedinUrl)
 
     return {
       name,
       title,
       email,
+      linkedinUrl,
       raw: rawParts.join(' — '),
     }
   })

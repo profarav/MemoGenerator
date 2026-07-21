@@ -1,5 +1,6 @@
 import { callClaude } from '@/lib/anthropic'
 import { SYSTEM_PROMPT, MemoSectionSpec } from '@/lib/agents/memoGenerator'
+import { OFFERING_DESCRIPTION } from '@/lib/config/offering'
 import { ParsedSection, stripLeadingHeading } from '@/lib/memo/sections'
 import { MemoRequest, ResearchSource } from '@/types'
 
@@ -50,13 +51,17 @@ THE FULL CURRENT MEMO (for context — so your rewrite doesn't repeat or contrad
 ${currentMemo}
 
 ---
-THE SECTION YOU ARE REWRITING: "## ${section.number}. ${section.title}"
+THE SECTION YOU ARE REWRITING: "## ${section.title}"
 
 Its current text is:
 ${section.body || '(empty)'}
 
 What this section is supposed to contain:
 ${spec.instructions}
+
+---
+OUR SERVICES (what Hugh's team offers — relevant if this section is QUESTIONS TO ASK or KEY TALKING POINTS):
+${OFFERING_DESCRIPTION}
 
 ---
 RESEARCH SOURCES (use these for any new detail — do not invent facts):
@@ -76,7 +81,7 @@ Lead this section with it and make sure it is addressed directly. If the researc
 Rewrite the section now.
 
 Rules:
-- Output ONLY the body of this one section. Do NOT include the "## ${section.number}. ${section.title}" heading.
+- Output ONLY the body of this one section. Do NOT include the "## ${section.title}" heading.
 - Do NOT output any other section, preamble, or commentary about your changes.
 - Keep the same markdown formatting conventions as the rest of the memo.
 - This must be a genuine improvement, not a reshuffle of the same sentences.${focus ? ' The focus instruction above is the priority.' : ''}`

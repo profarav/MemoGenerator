@@ -7,11 +7,11 @@ import { MemoRequest, ResearchSource, GeneratedMemo } from '@/types'
 
 export async function POST(req: NextRequest) {
   try {
-    const { memoId, sectionNumber, focus } = await req.json()
+    const { memoId, sectionTitle, focus } = await req.json()
 
-    if (!memoId || typeof sectionNumber !== 'number') {
+    if (!memoId || typeof sectionTitle !== 'string') {
       return NextResponse.json(
-        { error: 'memoId and sectionNumber are required' },
+        { error: 'memoId and sectionTitle are required' },
         { status: 400 }
       )
     }
@@ -30,12 +30,12 @@ export async function POST(req: NextRequest) {
     const currentMemo = memoData as GeneratedMemo
 
     const { sections } = parseMemoSections(currentMemo.memo_markdown)
-    const section = sections.find((s) => s.number === sectionNumber)
-    const spec = findSectionSpec(sectionNumber)
+    const section = sections.find((s) => s.title === sectionTitle)
+    const spec = findSectionSpec(sectionTitle)
 
     if (!section || !spec) {
       return NextResponse.json(
-        { error: `Section ${sectionNumber} not found in this memo` },
+        { error: `Section "${sectionTitle}" not found in this memo` },
         { status: 400 }
       )
     }
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     const sources: ResearchSource[] = sourcesRes.data ?? []
 
     console.log(
-      `[regenerate-section] Rewriting section ${sectionNumber} (${section.title})` +
+      `[regenerate-section] Rewriting section "${section.title}"` +
       `${focus ? ` with focus: "${focus}"` : ''}`
     )
 
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     const updatedMarkdown = replaceSectionBody(
       currentMemo.memo_markdown,
-      sectionNumber,
+      sectionTitle,
       newBody
     )
 
@@ -96,8 +96,8 @@ export async function POST(req: NextRequest) {
         confidence_level: currentMemo.confidence_level ?? 'medium',
         review_status: 'draft',
         patrick_feedback: focus
-          ? `Regenerated section ${sectionNumber} (${section.title}) with focus: ${focus}`
-          : `Regenerated section ${sectionNumber} (${section.title})`,
+          ? `Regenerated "${section.title}" with focus: ${focus}`
+          : `Regenerated "${section.title}"`,
       })
       .select()
       .single()

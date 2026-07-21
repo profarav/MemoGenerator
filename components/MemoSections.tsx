@@ -2,20 +2,20 @@
 
 import { useState } from 'react'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
-import { parseMemoSections } from '@/lib/memo/sections'
+import { parseMemoSections, isKnownSection } from '@/lib/memo/sections'
 
 interface Props {
   content: string
-  /** Which section number is currently regenerating, if any */
-  regeneratingSection: number | null
-  onRegenerateSection: (sectionNumber: number, focus: string) => void
+  /** Which section (by title) is currently regenerating, if any */
+  regeneratingSection: string | null
+  onRegenerateSection: (sectionTitle: string, focus: string) => void
   disabled?: boolean
 }
 
 /**
- * Renders a memo split into its numbered sections, each with its own
- * "Regenerate" control and optional focus instruction. Falls back to plain
- * rendering for memos that don't follow the expected section structure.
+ * Renders a memo split into its sections, each with its own "Regenerate"
+ * control and optional focus instruction. Falls back to plain rendering for
+ * memos that don't follow the expected section structure (e.g. older memos).
  */
 export default function MemoSections({
   content,
@@ -23,7 +23,7 @@ export default function MemoSections({
   onRegenerateSection,
   disabled,
 }: Props) {
-  const [openSection, setOpenSection] = useState<number | null>(null)
+  const [openSection, setOpenSection] = useState<string | null>(null)
   const [focus, setFocus] = useState('')
 
   const { preamble, sections } = parseMemoSections(content)
@@ -32,8 +32,8 @@ export default function MemoSections({
     return <MarkdownRenderer content={content} />
   }
 
-  function startRegenerate(sectionNumber: number) {
-    onRegenerateSection(sectionNumber, focus)
+  function startRegenerate(sectionTitle: string) {
+    onRegenerateSection(sectionTitle, focus)
     setOpenSection(null)
     setFocus('')
   }
@@ -43,12 +43,13 @@ export default function MemoSections({
       {preamble && <MarkdownRenderer content={preamble} />}
 
       {sections.map((section) => {
-        const isRegenerating = regeneratingSection === section.number
-        const isOpen = openSection === section.number
+        const isRegenerating = regeneratingSection === section.title
+        const isOpen = openSection === section.title
+        const canRegenerate = isKnownSection(section.title)
 
         return (
           <section
-            key={section.number}
+            key={section.title}
             className={`group relative -mx-2 rounded-md px-2 py-1 transition-colors ${
               isRegenerating ? 'bg-indigo-50/60' : 'hover:bg-gray-50'
             }`}
@@ -58,24 +59,24 @@ export default function MemoSections({
                 <MarkdownRenderer content={`${section.heading}\n${section.body}`} />
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenSection(isOpen ? null : section.number)
-                  setFocus('')
-                }}
-                disabled={disabled || regeneratingSection !== null}
-                title={`Regenerate "${section.title}"`}
-                className="mt-6 shrink-0 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 opacity-60 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-400"
-              >
-                {isRegenerating ? 'Regenerating…' : '↻ Regenerate'}
-              </button>
+              {canRegenerate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenSection(isOpen ? null : section.title)
+                    setFocus('')
+                  }}
+                  disabled={disabled || regeneratingSection !== null}
+                  title={`Regenerate "${section.title}"`}
+                  className="mt-6 shrink-0 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 opacity-60 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-700 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-400"
+                >
+                  {isRegenerating ? 'Regenerating…' : '↻ Regenerate'}
+                </button>
+              )}
             </div>
 
             {isRegenerating && (
-              <p className="mt-1 text-xs text-indigo-700">
-                Rewriting “{section.title}”…
-              </p>
+              <p className="mt-1 text-xs text-indigo-700">Rewriting “{section.title}”…</p>
             )}
 
             {isOpen && !isRegenerating && (
@@ -85,16 +86,15 @@ export default function MemoSections({
                 </label>
                 <textarea
                   rows={2}
-                  autoFocus
                   value={focus}
                   onChange={(e) => setFocus(e.target.value)}
-                  placeholder="e.g. Focus on what Colormatics actually produces, not their client list."
+                  placeholder="e.g. Focus on what they actually sell, not their client list."
                   className="input text-sm"
                 />
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => startRegenerate(section.number)}
+                    onClick={() => startRegenerate(section.title)}
                     className="btn-primary text-xs"
                   >
                     Regenerate section

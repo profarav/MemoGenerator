@@ -17,6 +17,7 @@ export interface Attendee {
   name: string
   title?: string
   email?: string
+  linkedinUrl?: string
   raw: string
 }
 

@@ -4,6 +4,9 @@ import MemoDetailClient from './MemoDetailClient'
 import { MemoRequest, GeneratedMemo, ResearchSource } from '@/types'
 
 export const dynamic = 'force-dynamic'
+// Supabase reads go through fetch, which Next would otherwise cache — that can
+// serve a stale memo right after a regeneration. Never cache them here.
+export const fetchCache = 'force-no-store'
 
 interface Props {
   params: { id: string }

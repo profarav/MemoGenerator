@@ -47,11 +47,11 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
   const [copiedClean, setCopiedClean] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [requestStatus, setRequestStatus] = useState(memoRequest.status)
-  const [regeneratingSection, setRegeneratingSection] = useState<number | null>(null)
+  const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null)
 
-  async function handleRegenerateSection(sectionNumber: number, focus: string) {
+  async function handleRegenerateSection(sectionTitle: string, focus: string) {
     if (!memo) return
-    setRegeneratingSection(sectionNumber)
+    setRegeneratingSection(sectionTitle)
     setError(null)
     try {
       const res = await fetch('/api/regenerate-section', {
@@ -59,7 +59,7 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memoId: memo.id,
-          sectionNumber,
+          sectionTitle,
           focus: focus || undefined,
         }),
       })

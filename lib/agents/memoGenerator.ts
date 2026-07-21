@@ -1,93 +1,87 @@
 import { callClaude } from '@/lib/anthropic'
-import { MemoRequest, ResearchSource, ResearchSummary, RelevanceMap } from '@/types'
+import { MEMO_SECTIONS } from '@/lib/memo/sections'
+import { OFFERING_DESCRIPTION } from '@/lib/config/offering'
+import { Attendee, MemoRequest, ResearchSource, ResearchSummary, RelevanceMap } from '@/types'
 
-export const SYSTEM_PROMPT = `You are writing a meeting prep memo for Hugh.
+export const SYSTEM_PROMPT = `You are writing a meeting prep memo for Hugh and his team before a sales meeting.
 
-The memo's job is to make Hugh feel like a smart human researcher briefed him — not like an AI summarized a company website.
+The memo's job: let someone SCAN it in under a minute and walk into the meeting knowing who they're talking to, what the company does, and how to run the conversation.
 
-What Hugh actually needs:
-- To know WHO the person is and what they have built, not just what their current company does
-- Specific, natural conversation openers based on real background details
-- A clear, honest answer to "why does this meeting matter"
-- The most interesting or non-obvious fact about the person, leading the memo
+This memo is scanned, not read. That means:
+- Structured and front-loaded. Key facts first. One point per bullet.
+- Bullet-heavy. The ONLY prose paragraph is the Quick Summary at the very end.
+- Specific over comprehensive — a sharp bullet beats a padded one.
+
+Depth still matters. Do NOT water down the research to make it short. Keep the specific, non-obvious details — real company, product, and school names; prior startups; traction numbers. Just deliver them as tight bullets, not narrative.
 
 Style rules:
-- Person-first, always. The most interesting thing is usually what someone built before, not their current company.
-- Plain English. One clear sentence before any detail. No buzzwords unless sourced directly.
-- Grounded. If uncertain, say so clearly but still explain what is known and why it matters.
-- Short enough to read in 3 minutes.
+- Plain English. Name the actual thing. No buzzwords: "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," "digital transformation."
+- Grounded. If uncertain, say so plainly and never fabricate. If a fact wasn't found, omit it rather than pad.
+- Every fact should be concrete enough that Hugh could repeat it out loud.
 
-Hard rules on prior products (enforce these strictly):
-- NEVER describe a prior product as "a digital product," "a technology platform," "unclear function," or "a service company." These are useless.
-- ALWAYS name the specific product category first: "a calendar and task assistant app," "a CRM for agencies," "a sales automation tool," "a marketplace for X." Use the research and scoring provided — the category has been pre-inferred for you.
-- If current status is unclear, say so AFTER describing what the product did. "Appears to have been a calendar/task app — current availability is unclear." Status uncertainty does not excuse description vagueness.
-- If a product's current status is unclear, that is itself a conversation hook. Write it as one.
-- Products that are divisions or arms of the CURRENT company go under Current Company or Interesting Signals — not Previous Companies.
+Hard rules on prior products (enforce strictly):
+- NEVER describe a prior product as "a digital product," "a technology platform," "unclear function," or "a service company."
+- ALWAYS name the specific category first: "a calendar and task assistant app," "a CRM for agencies," "a sales automation tool," "a marketplace for X." The category has been pre-inferred for you in the research.
+- If a product's current status is unclear, say so AFTER describing what it did — and treat that uncertainty as a conversation hook.
 
-What makes a memo bad:
-- Starting with the company's marketing copy
-- Describing a prior product as "unclear" without explaining what it appeared to do
-- Writing "Why it matters: he manages multiple companies" — that is not relevance
-- Describing a company with words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation" — these tell Hugh nothing
-- Using the company's own tagline or About page as the company description
-- Saying a company "helps brands tell their story" or "delivers impactful experiences" — those are not descriptions, they are slogans
-- Speculation without evidence (acquisitions, market entry, "strategic fit")`
+Discovery orientation:
+- QUESTIONS TO ASK and KEY TALKING POINTS are sales-meeting tools. Make them sharp and specific to THIS company and contact — questions a smart rep would actually ask, angles they'd actually use. Never generic.
+
+What makes this memo bad:
+- Paragraphs where bullets belong
+- Describing a company in its own marketing language or tagline
+- Generic questions that could apply to any company
+- Prior products left vague
+- Repeating the same fact across multiple sections`
 
 export interface MemoSectionSpec {
-  number: number
+  key: string
   title: string
   /** The writing instructions for this section, used verbatim in both full
    *  generation and single-section regeneration so the two can't drift. */
   instructions: string
 }
 
-export const MEMO_SECTION_SPECS: MemoSectionSpec[] = [
-  {
-    number: 1,
-    title: 'Quick Summary',
-    instructions: `3–5 sentences. Lead with the person, not the company. Who are they, what makes their background interesting? Write it like a smart colleague briefing Hugh in the hallway — specific, not generic.`,
-  },
-  {
-    number: 2,
-    title: 'Person Background',
-    instructions: `For each attendee: current role, how they got there, education if relevant, and any non-obvious career details. Be specific. Real names of companies, universities, or products. Do not repeat facts already stated in the Quick Summary — go deeper or move on.`,
-  },
-  {
-    number: 3,
-    title: 'Previous Companies & Products',
-    instructions: `For each prior startup, app, or product found:
-- **[Product/Company Name]** *(confirmed / likely / unclear)*
-  - What it did: [plain English description]
-  - Who it served: [target user or customer]
-  - Current status: [active / shut down / acquired / unclear — with any available evidence]
+const SECTION_INSTRUCTIONS: Record<string, string> = {
+  sector: `One or two sentences naming the sector/industry the company operates in and the market it serves. Concrete — e.g. "outdoor recreation and travel marketplace connecting campers with private and public camping accommodations." No buzzwords.`,
 
-If nothing was found: "No confirmed prior startups or products found in research."
+  who_they_are: `Scannable bullets about the COMPANY (not the person). Include, one point per bullet, in roughly this order:
+- Website — and company LinkedIn if it appears in the research (do not invent a URL)
+- What the product or service actually is, in plain terms — name the category
+- Core features or how it works
+- Positioning / what they emphasize
+- Footprint, scale, or traction — geography, customers, employee count, known clients — if found
+- Trust or traction signals — ratings, review volume, partnerships, notable numbers — if found
+Omit any bullet you don't have real information for. Do not pad.`,
 
-Do NOT skip this section. If status is unclear, still include the product.`,
-  },
-  {
-    number: 4,
-    title: 'Current Company',
-    instructions: `Explain concretely what this company does — not marketing language, but how it actually works. Do not repeat facts about the person already covered in sections 1–2.
+  who_talking_to: `A short contact block — one bullet each, identifiers only (background goes in the next section):
+- Name
+- Title
+- LinkedIn or email, if available
+List every attendee this way.`,
 
-Cover:
-- **What they sell or build**: name the actual product or service in plain terms (e.g. "a video production company that makes brand commercials," not "a creative agency"). If it is software, say what the software does. If it is a service, say what the service delivers.
-- **Who their customers are**: specific industries, company sizes, or buyer types — not "brands" or "enterprises."
-- **How the business works**: agency? SaaS? Marketplace? Retainer? Project-based? Be direct.
-- **Scale or traction**: employee count, known clients, geographic reach, or revenue signals if found in research. If nothing was found, say so.
-- **Anything differentiated**: one thing that makes them different from competitors in the same space, based on research — not their own marketing claim.
+  background: `Bullets on the contact's background — this is where depth matters, keep it rich but scannable, one point per line:
+- Current role, tenure, and scope
+- Career trajectory — how they got here, with real company and school names
+- Notable prior companies, products, or startups. One line each: **Name** (confirmed / likely / unclear) — what it did, who it served, current status. Never leave a prior product vague; name the category. If status is unclear, still include it and say so.
+- Any non-obvious detail that makes them interesting or informs the meeting
+No nested sub-bullets — keep each point to a single line. If nothing notable was found, say so plainly.`,
 
-Do not use words like "innovative," "cutting-edge," "solutions," "leverage," "ecosystem," or "digital transformation." If you cannot describe what they do without those words, say what is unclear and what was searched.`,
-  },
-  {
-    number: 5,
-    title: 'Sources Checked',
-    instructions: `List each: Title — URL`,
-  },
-]
+  questions: `A numbered list of 4–6 sharp discovery questions to ask in this meeting. Ground them in what this company does, the meeting type, our services (see OUR SERVICES), and any focus/context provided. Open-ended and specific to THEM — not questions that could be asked of any company. Aim at their goals, current state, what's driving the conversation, how decisions get made, and where our services could fit. Avoid yes/no questions. If the research doesn't clearly support that a service is relevant, ask a question that surfaces whether it is rather than assuming it.`,
 
-export function findSectionSpec(sectionNumber: number): MemoSectionSpec | undefined {
-  return MEMO_SECTION_SPECS.find((s) => s.number === sectionNumber)
+  talking_points: `Bullets — angles and hooks to use in the conversation, oriented toward how our services (see OUR SERVICES) could help them. Draw on the relevance analysis and research: what about their business, background, or recent signals gives a natural way in; what to emphasize; and what to be aware of (e.g. "two-sided marketplace — hosts and campers may need distinct strategies"). Each a single scannable line. These must be genuinely useful to a rep, not restatements of facts already listed above.`,
+
+  summary: `3–5 sentences — the only prose in the memo. Recap: what the company does, who the contact is, what this meeting is likely about, and the single most important thing to focus on. Write it like a colleague's quick brief — specific, not generic.`,
+}
+
+export const MEMO_SECTION_SPECS: MemoSectionSpec[] = MEMO_SECTIONS.map((s) => ({
+  key: s.key,
+  title: s.title,
+  instructions: SECTION_INSTRUCTIONS[s.key] ?? '',
+}))
+
+export function findSectionSpec(sectionTitle: string): MemoSectionSpec | undefined {
+  return MEMO_SECTION_SPECS.find((s) => s.title === sectionTitle)
 }
 
 function depthNote(depth: string): string {
@@ -105,6 +99,21 @@ function formatMeetingType(type: string | null): string {
     other: 'Other',
   }
   return type ? (map[type] ?? type) : 'Not specified'
+}
+
+/** Structured attendee list including LinkedIn/email so the memo can populate
+ *  the WHO WE'RE TALKING TO contact block with real identifiers. */
+function buildAttendeeBlock(attendees: Attendee[] | null): string {
+  if (!Array.isArray(attendees) || attendees.length === 0) return 'Not specified'
+  return attendees
+    .map((a) => {
+      const parts = [`- Name: ${a.name}`]
+      if (a.title) parts.push(`  Title: ${a.title}`)
+      if (a.email) parts.push(`  Email: ${a.email}`)
+      if (a.linkedinUrl) parts.push(`  LinkedIn: ${a.linkedinUrl}`)
+      return parts.join('\n')
+    })
+    .join('\n')
 }
 
 function buildPersonContext(summary: ResearchSummary): string {
@@ -196,12 +205,7 @@ export async function generateMemo(
   sources: ResearchSource[],
   relevanceMap?: RelevanceMap
 ): Promise<string> {
-  const attendeeList =
-    Array.isArray(memoRequest.attendees) && memoRequest.attendees.length > 0
-      ? memoRequest.attendees
-          .map((a) => a.raw || `${a.name}${a.title ? ` — ${a.title}` : ''}`)
-          .join('\n')
-      : 'Not specified'
+  const attendeeList = buildAttendeeBlock(memoRequest.attendees)
 
   const personContext = buildPersonContext(researchSummary)
   const relevanceContext = relevanceMap ? buildRelevanceContext(relevanceMap) : ''
@@ -212,6 +216,10 @@ export async function generateMemo(
   const user = `Write a meeting prep memo for Hugh. Use the person and relevance research below — it has already been analyzed and prioritized for you.
 
 Depth: ${depthNote(memoRequest.memo_depth)}
+
+---
+OUR SERVICES (what Hugh's team offers — angle QUESTIONS TO ASK and KEY TALKING POINTS toward uncovering fit for these, without making the memo a pitch):
+${OFFERING_DESCRIPTION}
 
 ---
 MEETING
@@ -239,9 +247,9 @@ RECENT SIGNALS:
 - ${signals}
 
 ${memoRequest.known_context ? `---
-⚠️ FOCUS INSTRUCTION — Patrick specifically wants this memo to prioritize:
+⚠️ FOCUS INSTRUCTION — Hugh specifically wants this memo to prioritize:
 "${memoRequest.known_context}"
-Lead the Quick Summary with this. Make sure section 4 addresses it directly if relevant. Do not bury it.
+Make sure QUESTIONS TO ASK, KEY TALKING POINTS, and the QUICK SUMMARY reflect this directly. Do not bury it.
 ` : ''}
 ---
 INTERNAL CONTEXT (emails/Slack/Granola):
@@ -252,11 +260,9 @@ SOURCES:
 ${sourceList || 'No sources.'}
 
 ---
-Write the memo using EXACTLY this structure. Do not add sections. Do not skip sections.
+Write the memo using EXACTLY this structure and these EXACT headings, in this order. Do not add, rename, renumber, or skip sections. Start directly with the first heading — no title line.
 
-# Meeting Prep Memo: ${memoRequest.company_name}
-
-${MEMO_SECTION_SPECS.map((s) => `## ${s.number}. ${s.title}\n${s.instructions}`).join('\n\n')}`
+${MEMO_SECTION_SPECS.map((s) => `## ${s.title}\n${s.instructions}`).join('\n\n')}`
 
   return callClaude(SYSTEM_PROMPT, user, 6000)
 }
