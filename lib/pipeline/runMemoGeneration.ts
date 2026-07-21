@@ -10,6 +10,7 @@ import { summarizeSources } from '@/lib/agents/researchSummarizer'
 import { mapRelevance } from '@/lib/agents/relevanceMapper'
 import { generateMemo } from '@/lib/agents/memoGenerator'
 import { searchWeb } from '@/lib/search/searchProvider'
+import { deliverMemo } from '@/lib/pipeline/deliverMemo'
 import { MemoRequest, Attendee, ResearchSource, GeneratedMemo } from '@/types'
 
 async function runSearches(queries: string[]): Promise<Array<{
@@ -151,10 +152,36 @@ export async function runMemoGeneration(memoRequestId: string): Promise<{
  * memo_request as 'failed' so the UI can show an error + retry instead of
  * spinning forever. Used with waitUntil() — never throws.
  */
-export async function runMemoGenerationInBackground(memoRequestId: string): Promise<void> {
+export async function runMemoGenerationInBackground(
+  memoRequestId: string,
+  options: { clickupTaskId?: string } = {}
+): Promise<void> {
   try {
-    await runMemoGeneration(memoRequestId)
+    const { memo } = await runMemoGeneration(memoRequestId)
     console.log(`[runMemoGeneration] Background generation complete for ${memoRequestId}`)
+
+    // Export to Google Docs (and comment on ClickUp when a task is known).
+    // Delivery never throws — a generated memo stays available in the app even
+    // if the export fails.
+    const { data: freshRequest } = await supabaseAdmin
+      .from('memo_requests')
+      .select('*')
+      .eq('id', memoRequestId)
+      .single()
+
+    if (freshRequest) {
+      const delivery = await deliverMemo({
+        memoRequest: freshRequest as MemoRequest,
+        memo,
+        clickupTaskId:
+          options.clickupTaskId ??
+          (freshRequest as { clickup_task_id?: string }).clickup_task_id ??
+          undefined,
+      })
+      if (delivery.errors.length > 0) {
+        console.warn(`[runMemoGeneration] Delivery issues for ${memoRequestId}:`, delivery.errors)
+      }
+    }
   } catch (err) {
     console.error(`[runMemoGeneration] Background generation failed for ${memoRequestId}:`, err)
     try {

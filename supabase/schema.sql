@@ -119,3 +119,17 @@ create index if not exists idx_apollo_people_cache_lookup_key
 
 create index if not exists idx_apollo_organization_cache_domain
   on apollo_organization_cache (domain);
+
+-- ============================================================
+-- Migrations
+-- `create table if not exists` above does NOT add columns to a table that
+-- already exists, so newer columns are added explicitly here. These are
+-- idempotent — safe to re-run the whole file against an existing database.
+-- ============================================================
+
+-- Google Doc export + ClickUp linkage (booking webhook integration)
+alter table memo_requests add column if not exists google_doc_url  text;
+alter table memo_requests add column if not exists clickup_task_id text;
+
+create index if not exists idx_memo_requests_clickup_task_id
+  on memo_requests (clickup_task_id);
