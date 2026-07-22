@@ -10,6 +10,31 @@
  * still reads as a list once it lands in the document.
  */
 
+/**
+ * Convert text to Unicode "mathematical sans-serif bold" characters.
+ *
+ * Why this exists: the memo reaches Google Docs through a Zapier template
+ * placeholder, which does plain-text substitution — it cannot apply bold
+ * formatting to part of what it inserts. These characters are bold *shapes*,
+ * so headings render bold without any formatting being applied.
+ *
+ * Trade-off: they aren't really styled text. Ctrl+F for "SECTOR" won't match
+ * the bolded heading, and the glyphs may fall back to a different font.
+ * If the doc template ever gains its own styled headings, drop this and use
+ * the per-section fields instead.
+ */
+export function toUnicodeBold(text: string): string {
+  let out = ''
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!
+    if (c >= 65 && c <= 90) out += String.fromCodePoint(0x1d5d4 + c - 65)        // A–Z
+    else if (c >= 97 && c <= 122) out += String.fromCodePoint(0x1d5ee + c - 97)  // a–z
+    else if (c >= 48 && c <= 57) out += String.fromCodePoint(0x1d7ec + c - 48)   // 0–9
+    else out += ch
+  }
+  return out
+}
+
 export function stripMarkdown(md: string): string {
   return (
     md

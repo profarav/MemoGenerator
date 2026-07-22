@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { parseMemoSections, MEMO_SECTIONS } from '@/lib/memo/sections'
-import { stripMarkdown } from '@/lib/memo/plainText'
+import { stripMarkdown, toUnicodeBold } from '@/lib/memo/plainText'
 import { Attendee, MemoRequest, GeneratedMemo } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -90,6 +90,13 @@ export async function GET(
     sectionFields[spec.key] = found ? stripMarkdown(found.body) : ''
   }
 
+  // full_memo goes into a single template placeholder, so the headings have to
+  // carry their own emphasis — Zapier's placeholder substitution is plain text
+  // and can't bold part of what it inserts. Unicode bold glyphs do the job.
+  const fullMemo = sections
+    .map((s) => `${toUnicodeBold(s.title)}\n${stripMarkdown(s.body)}`)
+    .join('\n\n')
+
   const attendees: Attendee[] = Array.isArray(memoRequest.attendees)
     ? memoRequest.attendees
     : []
@@ -110,7 +117,7 @@ export async function GET(
     docTitle: `Meeting Prep — ${memoRequest.company_name}`,
     // Section fields for the Google Docs template placeholders
     ...sectionFields,
-    // Everything at once, if a single placeholder is easier
-    full_memo: stripMarkdown(memo.memo_markdown),
+    // Everything at once, with bolded headings, for a single placeholder
+    full_memo: fullMemo,
   })
 }
