@@ -68,18 +68,33 @@ export async function POST(req: NextRequest) {
     } = body as Record<string, string | undefined>
 
     // Apollo resolves best from an email; name + domain is the fallback path.
-    const rawInput = [attendeeEmail, attendeeName].filter(Boolean).join('\n').trim()
-    const hasFallback = Boolean(attendeeName && companyDomain)
+    // Validate up front: a blank or malformed mapping (a common Zapier
+    // misconfiguration) should fail here, loudly, rather than three minutes
+    // later with an unenriched memo.
+    const looksLikeEmail = (v?: string) => Boolean(v && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()))
+    const hasFallback = Boolean(attendeeName?.trim() && companyDomain?.trim())
 
-    if (!attendeeEmail && !hasFallback) {
+    if (!looksLikeEmail(attendeeEmail) && !hasFallback) {
       return NextResponse.json(
         {
           error:
-            'Need either attendeeEmail, or attendeeName plus companyDomain, to identify who the meeting is with.',
+            'Could not identify the attendee. Send a valid attendeeEmail (e.g. "jenna@hipcamp.com"), ' +
+            'or attendeeName plus companyDomain. ' +
+            'If this came from Zapier, check that the ClickUp field mapped to attendeeEmail is populated on the task.',
+          received: {
+            attendeeEmail: attendeeEmail ?? null,
+            attendeeName: attendeeName ?? null,
+            companyDomain: companyDomain ?? null,
+          },
         },
         { status: 400 }
       )
     }
+
+    const rawInput = [looksLikeEmail(attendeeEmail) ? attendeeEmail : null, attendeeName]
+      .filter(Boolean)
+      .join('\n')
+      .trim()
 
     const [firstName, ...restName] = (attendeeName ?? '').trim().split(/\s+/)
 
