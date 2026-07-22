@@ -94,7 +94,8 @@ export async function GET(
     ? memoRequest.attendees
     : []
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin
+  // Trailing slash on the env var would produce "https://app//memo/..."
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin).replace(/\/+$/, '')
 
   return NextResponse.json({
     status: 'ready',
