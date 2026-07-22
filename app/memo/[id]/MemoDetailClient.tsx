@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MemoRequest, GeneratedMemo, ResearchSource } from '@/types'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import MemoSections from '@/components/MemoSections'
+import { stripMarkdown } from '@/lib/memo/plainText'
 
 // If a request has been 'generating' longer than this, assume the background
 // job died (e.g. hit the platform time limit) and offer a retry. Slightly
@@ -222,29 +223,6 @@ export default function MemoDetailClient({ memoRequest, latestMemo, sources }: P
     await navigator.clipboard.writeText(memo.memo_markdown)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  function stripMarkdown(md: string): string {
-    return md
-      // Remove ATX headings: ## Heading → Heading
-      .replace(/^#{1,6}\s+/gm, '')
-      // Remove bold/italic: **text** or __text__ or *text* or _text_
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/__([^_]+)__/g, '$1')
-      .replace(/\*([^*]+)\*/g, '$1')
-      .replace(/_([^_]+)_/g, '$1')
-      // Remove inline code: `code`
-      .replace(/`([^`]+)`/g, '$1')
-      // Convert links: [text](url) → text
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      // Remove horizontal rules: --- or *** or ___
-      .replace(/^[-*_]{3,}\s*$/gm, '')
-      // Remove bullet/numbered list markers: - item or * item or 1. item
-      .replace(/^[\s]*[-*+]\s+/gm, '')
-      .replace(/^[\s]*\d+\.\s+/gm, '')
-      // Collapse 3+ blank lines into 2
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
   }
 
   async function handleCopyClean() {
