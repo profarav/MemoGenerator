@@ -33,6 +33,9 @@ import { runBookingMemoInBackground } from '@/lib/pipeline/runBookingMemo'
 // Background work is kept alive past the response via waitUntil.
 export const maxDuration = 300
 
+/** Repeat bookings inside this window reuse the existing memo (see below). */
+const DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000
+
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }
@@ -98,6 +101,57 @@ export async function POST(req: NextRequest) {
 
     const [firstName, ...restName] = (attendeeName ?? '').trim().split(/\s+/)
 
+    // --- Duplicate guard ---
+    // The Zap can fire more than once for the same booking (a task edited
+    // again while already in the triggering status, a deal moved out and back,
+    // a replayed run). Regenerating costs Apollo credits and model spend and
+    // litters Drive with near-identical docs, so return the existing memo
+    // instead. The 24h window still allows a deliberate re-run tomorrow.
+    const since = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString()
+
+    let existing: { id: string; status: string } | null = null
+
+    if (clickupTaskId) {
+      const { data } = await supabaseAdmin
+        .from('memo_requests')
+        .select('id,status')
+        .eq('clickup_task_id', clickupTaskId)
+        .neq('status', 'failed')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      existing = data?.[0] ?? null
+    }
+
+    if (!existing && attendeeEmail) {
+      // Falls back to the attendee — catches repeats when no task id is sent.
+      // The filter value must be a JSON *string*: passing an array makes
+      // postgrest-js emit `cs.{[object Object]}`, which silently matches nothing.
+      const { data } = await supabaseAdmin
+        .from('memo_requests')
+        .select('id,status')
+        .contains('attendees', JSON.stringify([{ email: attendeeEmail.trim() }]))
+        .neq('status', 'failed')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      existing = data?.[0] ?? null
+    }
+
+    if (existing) {
+      console.log(
+        `[booking] Duplicate suppressed — reusing memo ${existing.id} ` +
+        `(${clickupTaskId ? `task ${clickupTaskId}` : attendeeEmail})`
+      )
+      const base = (process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin).replace(/\/+$/, '')
+      return NextResponse.json({
+        memoId: existing.id,
+        status: existing.status,
+        memoUrl: `${base}/memo/${existing.id}`,
+        duplicate: true,
+      })
+    }
+
     // --- Insert a placeholder so the memo is trackable immediately ---
     const placeholderCompany =
       companyName ?? companyDomain ?? attendeeEmail?.split('@')[1] ?? 'Pending enrichment'
@@ -113,6 +167,19 @@ export async function POST(req: NextRequest) {
         memo_depth: 'standard',
         status: 'generating',
         clickup_task_id: clickupTaskId ?? null,
+        // Provisional attendee, replaced by the enriched version moments later.
+        // Recording the email now means a second webhook firing seconds after
+        // the first still matches the duplicate guard, which would otherwise
+        // only see attendees once enrichment had finished.
+        attendees: attendeeEmail
+          ? [
+              {
+                name: attendeeName?.trim() || attendeeEmail,
+                email: attendeeEmail.trim(),
+                raw: [attendeeName?.trim(), attendeeEmail.trim()].filter(Boolean).join(' — '),
+              },
+            ]
+          : null,
       })
       .select()
       .single()
